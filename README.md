@@ -1,8 +1,8 @@
 # Symphony Jam relay
 
-Symphony 0.2 requires this updated relay (protocol version 2). Replace the
+Symphony 0.3 requires this updated relay (protocol version 3). Replace the
 server files in your Render-connected repository and redeploy. Existing rooms
-end during deployment. Your `/health` response should include `protocolVersion: 2`.
+end during deployment. Your `/health` response should include `protocolVersion: 3`.
 
 A small, dependency-free Node server for shared queues and host-led synchronized
 playback. Audio goes directly from each listener's music source to their app;
@@ -33,11 +33,9 @@ rooms. Do not deploy to a platform limited to short-lived request functions.
 3. Select **Copy invite** and send the complete code to a friend.
 4. Your friend opens **Jam → Join a Jam** in this same Symphony build, enters a
    name, and pastes the invite.
-5. Add songs from the Jam search or a song's **Add to Jam** menu. The host controls
-   play, pause, seeking, skips, and queue order. Listener volume stays local.
-   The owner can separately grant each listener permission to skip songs and
-   pause/resume/stop music. Authorized listeners are shown as DJs. These grants
-   are checked by the relay and can be revoked immediately.
+5. Add songs from the Jam search or a song's **Add to Jam** menu. Listener volume stays local.
+   Everyone can play, pause, stop, skip, seek, change speed, edit the shared queue,
+   remove another participant, or end the Jam. There are no roles to assign.
 
 Search previews are local to the listener's device and are not relayed. Click
 a song's title to add it to the queue; the preview button never adds a song.
@@ -57,8 +55,9 @@ Run `node --test server.test.mjs` for the two-client relay integration test.
 - Up to 20 participants and 200 queued tracks per room.
 - Names are shown to other room members; no login is required.
 - Invites contain a random join secret. Anyone with the invite can join.
-- Each participant gets a separate random session token. Only the host can
-  publish playback state, remove participants, or end the room for everyone.
+- Each participant gets a separate random session token and equal playback and
+  room controls. One app coordinates state updates to keep all devices in sync.
+  Removing or disconnecting that coordinating device ends the room.
 - Removed participant tokens stop working; a person holding the invite may
   join again. End the room and create a new one to replace the invitation.
 - A lost host has 30 seconds to reconnect. Disconnected guests expire after
@@ -70,3 +69,7 @@ Run `node --test server.test.mjs` for the two-client relay integration test.
 - Each device needs access to the chosen song. Regional/source failures can
   prevent a listener from playing a song even when others can hear it.
 - Keep HTTPS access logs private: event-stream URLs contain session tokens.
+
+When the chosen queue ends, the coordinating app requests related songs based on the last three queued tracks and shares
+them with the whole room. Stop pauses playback without starting suggestions.
+The coordinating device must stay connected; leaving it ends the room.

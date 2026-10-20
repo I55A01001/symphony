@@ -8,7 +8,7 @@ test('validates and sanitizes shared music metadata',()=>{
   assert.throws(()=>cleanSnapshot({queue:[track],currentIndex:4,status:'playing'}));
   assert.throws(()=>cleanSnapshot({queue:Array(201).fill(track),currentIndex:0,status:'playing'}));
 });
-test('two clients share a queue and state, with host-only playback and revocation',async()=>{
+test('two clients share a queue and state, with equal participant controls',async()=>{
   const server=createJamServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const base=`http://127.0.0.1:${server.address().port}`;
   const controllers=[];
@@ -43,24 +43,24 @@ test('two clients share a queue and state, with host-only playback and revocatio
     await post(path+'/actions',{type:'ack',ids:[addition.id]},host.token);
     const acknowledged=await fetch(base+path+'/status',{headers:{Authorization:`Bearer ${host.token}`}}).then(r=>r.json());
     assert.equal(acknowledged.additions.length,0);
-    assert.equal((await post(path+'/actions',{type:'control',command:'skip'},guest.token)).status,403);
-    assert.equal((await post(path+'/actions',{type:'permissions',id:guest.participantId,canSkip:true,canPause:true},guest.token)).status,403);
-    assert.equal((await post(path+'/actions',{type:'permissions',id:guest.participantId,canSkip:true,canPause:false},host.token)).status,200);
-    assert.equal((await post(path+'/actions',{type:'control',command:'skip'},guest.token)).status,200);
+    for(const command of ['skip','pause','resume','stop','previous','clear']){
+      assert.equal((await post(path+'/actions',{type:'control',command},guest.token)).status,200);
+    }
+    assert.equal((await post(path+'/actions',{type:'control',command:'seek',payload:{positionMs:5000}},guest.token)).status,200);
+    assert.equal((await post(path+'/actions',{type:'control',command:'seek',payload:{positionMs:-1}},guest.token)).status,400);
     const command=await hostEvent('control');assert.equal(command.command,'skip');
-    assert.equal((await post(path+'/actions',{type:'control',command:'stop'},guest.token)).status,403);
     const pendingControls=await fetch(base+path+'/status',{headers:{Authorization:`Bearer ${host.token}`}}).then(r=>r.json());
     assert.equal(pendingControls.controls[0].id,command.id);
+    assert.equal(pendingControls.members.some(m=>'canSkip' in m||'canPause' in m),false);
     await post(path+'/actions',{type:'ack',ids:[command.id]},host.token);
-    await post(path+'/actions',{type:'permissions',id:guest.participantId,canSkip:false,canPause:true},host.token);
-    assert.equal((await post(path+'/actions',{type:'control',command:'skip'},guest.token)).status,403);
-    assert.equal((await post(path+'/actions',{type:'control',command:'stop'},guest.token)).status,200);
-    const guestMembers=await fetch(base+path+'/status',{headers:{Authorization:`Bearer ${guest.token}`}}).then(r=>r.json());
-    assert.equal(guestMembers.members.find(m=>m.id===guest.participantId).canPause,true);
+    const other=(await post(path+'/join',{name:'Other',invite:host.invite})).data;
+    assert.equal((await post(path+'/actions',{type:'kick',id:other.participantId},guest.token)).status,200);
+    assert.equal((await post(path+'/actions',{type:'control',command:'skip'},other.token)).status,403);
     await post(path+'/actions',{type:'kick',id:guest.participantId},host.token);
     await guestEvent('removed');
     assert.equal((await post(path+'/actions',{type:'enqueue',track},guest.token)).status,403);
-    await post(path+'/actions',{type:'leave'},host.token);
+    const last=(await post(path+'/join',{name:'Last',invite:host.invite})).data;
+    assert.equal((await post(path+'/actions',{type:'end'},last.token)).status,200);
     assert.equal((await post(path+'/join',{name:'Late',invite:host.invite})).status,404);
   }finally{controllers.forEach(c=>c.abort());server.closeAllConnections();await new Promise(r=>server.close(r));}
 });

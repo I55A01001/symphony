@@ -21,7 +21,7 @@ export function createJamServer() {
   const rooms=new Map(), budgets=new Map();
   const send=(res,type,data)=>res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
   const broadcast=(room,type,data)=>{ for(const p of room.people.values()) if(p.stream) send(p.stream,type,data); };
-  const members=room=>[...room.people.values()].map(p=>({id:p.id,name:p.name,host:p.host,canSkip:p.host||p.canSkip,canPause:p.host||p.canPause,online:!!p.stream||Date.now()-p.lastSeen<6000}));
+  const members=room=>[...room.people.values()].map(p=>({id:p.id,name:p.name,host:p.host,online:!!p.stream||Date.now()-p.lastSeen<6000}));
   const end=room=>{broadcast(room,'ended',{}); for(const p of room.people.values()) p.stream?.end(); rooms.delete(room.id);};
   const server=http.createServer(async(req,res)=>{
     res.setHeader('Access-Control-Allow-Origin','*');
@@ -32,7 +32,7 @@ export function createJamServer() {
     try {
       if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
       const url=new URL(req.url,'http://localhost');
-      if(req.method==='GET' && url.pathname==='/health'){json(200,{ok:true,protocolVersion:2,now:Date.now()});return;}
+      if(req.method==='GET' && url.pathname==='/health'){json(200,{ok:true,protocolVersion:3,now:Date.now()});return;}
       if(req.method==='GET' && url.pathname==='/'){
         res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",'Referrer-Policy':'no-referrer'});
         res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Join Symphony Jam</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#101010;color:#fafafa;font:16px/1.6 system-ui,sans-serif}main{max-width:520px;padding:36px}h1{font-size:38px;line-height:1.15;letter-spacing:-1px}p,li{color:#bdbdbd}label{display:block;font-weight:600}textarea{box-sizing:border-box;width:100%;margin:12px 0;padding:14px;border:1px solid #444;border-radius:12px;background:#202020;color:#fff;font:13px/1.5 monospace;resize:none}button{padding:12px 20px;border:0;border-radius:10px;background:#fff;color:#111;font-weight:700;cursor:pointer}small{display:block;margin-top:24px;color:#888}</style><main><p>SYMPHONY TOGETHER</p><h1>Join your friends’ Jam.</h1><p>This is the Symphony Jam connection server. Listen using the Symphony desktop app.</p><ol><li>Open Symphony and click the Jam icon.</li><li>Choose <strong>Join a Jam</strong> and enter your name.</li><li>Paste the complete invite code below.</li></ol><section id="invite" hidden><label for="code">Your invite code</label><textarea id="code" rows="4" readonly></textarea><button id="copy">Copy invite</button><p id="status" role="status"></p></section><p id="empty">Ask your friend for their complete Jam invite code.</p><small>Each listener needs Symphony installed. This page does not play music.</small></main><script>const code=location.href;const valid=/^#jam=[a-f0-9]{12}\\.[A-Za-z0-9_-]{32}$/.test(location.hash);if(valid){document.getElementById('invite').hidden=false;document.getElementById('empty').hidden=true;document.getElementById('code').value=code;}document.getElementById('copy').onclick=async()=>{try{await navigator.clipboard.writeText(code);document.getElementById('status').textContent='Copied. Paste it into Symphony → Jam → Join a Jam.';}catch{document.getElementById('code').select();document.getElementById('status').textContent='Select and copy the invite above.';}};</script></html>`);return;
@@ -42,7 +42,7 @@ export function createJamServer() {
       if(now-budget.at>60_000){budget.at=now;budget.n=0;} budgets.set(address,budget);
       if(++budget.n>1200) throw fail(429,'Too many requests. Try again shortly.');
       const body=async()=>{let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>256_000) throw fail(413,'Request too large');}try{return JSON.parse(raw||'{}');}catch{throw fail(400,'Invalid JSON');}};
-      const person=(name,host)=>({id:secret(),token:secret(),name:String(name||'Listener').trim().slice(0,32)||'Listener',host,canSkip:false,canPause:false,stream:null,lastSeen:now});
+      const person=(name,host)=>({id:secret(),token:secret(),name:String(name||'Listener').trim().slice(0,32)||'Listener',host,stream:null,lastSeen:now});
       const credentials=(room,p)=>({roomId:room.id,invite:room.invite,token:p.token,participantId:p.id,host:p.host});
       if(req.method==='POST' && url.pathname==='/rooms'){
         if(rooms.size>=500) throw fail(503,'Jam server is full');
@@ -88,22 +88,33 @@ export function createJamServer() {
         if(!p.host) throw fail(403,'Only the host can acknowledge queue additions');
         if(!Array.isArray(b.ids)||b.ids.length>200)throw fail(400,'Invalid acknowledgement');
         for(const id of b.ids){room.pending.delete(id);room.controls.delete(id);}
-      } else if(b.type==='permissions') {
-        if(!p.host)throw fail(403,'Only the owner can assign Jam roles');
-        const target=[...room.people.values()].find(x=>x.id===b.id&&!x.host);
-        if(!target)throw fail(404,'Listener not found');
-        target.canSkip=b.canSkip===true;target.canPause=b.canPause===true;
-        broadcast(room,'members',members(room));
       } else if(b.type==='control') {
-        if(!['skip','pause','resume','stop'].includes(b.command))throw fail(400,'Invalid playback command');
-        if(!p.host && !(b.command==='skip'?p.canSkip:p.canPause))throw fail(403,'The owner has not granted you this control');
+        if(!['skip','pause','resume','stop','previous','seek','rate','clear','reorder','play'].includes(b.command))throw fail(400,'Invalid playback command');
+        const payload={};
+        for(const key of ({seek:['positionMs'],rate:['rate'],reorder:['fromIndex','toIndex']}[b.command]||[])){
+          const value=b.payload?.[key];
+          if(typeof value!=='number'||!Number.isFinite(value)||value<0||value>86_400_000)throw fail(400,'Invalid control value');
+          if((key==='fromIndex'||key==='toIndex')&&(!Number.isInteger(value)||value>=200))throw fail(400,'Invalid queue index');
+          if(key==='rate'&&(value<.25||value>4))throw fail(400,'Invalid playback rate');
+          payload[key]=value;
+        }
         if(room.controls.size>=50)throw fail(429,'Too many pending controls');
-        const command={id:secret(),command:b.command,by:p.id};room.controls.set(command.id,command);
+        if(b.command==='play'){
+          payload.track=cleanTrack(b.payload?.track);
+          const queue=b.payload?.queue||[payload.track];
+          if(!Array.isArray(queue)||queue.length>200)throw fail(400,'Invalid queue');
+          payload.queue=queue.map(cleanTrack);
+          payload.queueIndex=b.payload?.queueIndex??payload.queue.findIndex(t=>t.id===payload.track.id);
+          if(!Number.isInteger(payload.queueIndex)||payload.queueIndex<0||payload.queueIndex>=payload.queue.length||payload.queue[payload.queueIndex].id!==payload.track.id)throw fail(400,'Invalid queue index');
+        }
+        const command={id:secret(),command:b.command,payload,by:p.id};room.controls.set(command.id,command);
         broadcast(room,'control',command);
       } else if(b.type==='kick') {
-        if(!p.host) throw fail(403,'Only the host can remove listeners');
-        const target=[...room.people.values()].find(x=>x.id===b.id&&!x.host);
-        if(target){if(target.stream){send(target.stream,'removed',{});target.stream.end();}room.people.delete(target.token);broadcast(room,'members',members(room));}
+        const target=[...room.people.values()].find(x=>x.id===b.id&&x.id!==p.id);
+        if(target?.host){end(room);}
+        else if(target){if(target.stream){send(target.stream,'removed',{});target.stream.end();}room.people.delete(target.token);broadcast(room,'members',members(room));}
+      } else if(b.type==='end') {
+        end(room);
       } else if(b.type==='leave') {
         if(p.host) end(room);else{p.stream?.end();room.people.delete(p.token);broadcast(room,'members',members(room));}
       } else throw fail(400,'Unknown action');
