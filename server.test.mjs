@@ -20,6 +20,8 @@ test('two clients share a queue and state, with host-only playback and revocatio
     return async(type)=>{for(;;){let end;while((end=buffer.indexOf('\n\n'))>=0){const block=buffer.slice(0,end);buffer=buffer.slice(end+2);if(block.startsWith(`event: ${type}\n`))return JSON.parse(block.split('\ndata: ')[1]);}const result=await reader.read();if(result.done)throw Error('Stream ended');buffer+=decoder.decode(result.value,{stream:true});}};
   }
   try{
+    const landing=await fetch(base+'/');
+    assert.equal(landing.status,200);assert.match(await landing.text(),/Join your friends/);
     const host=(await post('/rooms',{name:'Host'})).data;
     const path=`/rooms/${host.roomId}`;
     assert.equal((await post(path+'/join',{name:'Bad',invite:'wrong'})).status,403);
@@ -41,6 +43,20 @@ test('two clients share a queue and state, with host-only playback and revocatio
     await post(path+'/actions',{type:'ack',ids:[addition.id]},host.token);
     const acknowledged=await fetch(base+path+'/status',{headers:{Authorization:`Bearer ${host.token}`}}).then(r=>r.json());
     assert.equal(acknowledged.additions.length,0);
+    assert.equal((await post(path+'/actions',{type:'control',command:'skip'},guest.token)).status,403);
+    assert.equal((await post(path+'/actions',{type:'permissions',id:guest.participantId,canSkip:true,canPause:true},guest.token)).status,403);
+    assert.equal((await post(path+'/actions',{type:'permissions',id:guest.participantId,canSkip:true,canPause:false},host.token)).status,200);
+    assert.equal((await post(path+'/actions',{type:'control',command:'skip'},guest.token)).status,200);
+    const command=await hostEvent('control');assert.equal(command.command,'skip');
+    assert.equal((await post(path+'/actions',{type:'control',command:'stop'},guest.token)).status,403);
+    const pendingControls=await fetch(base+path+'/status',{headers:{Authorization:`Bearer ${host.token}`}}).then(r=>r.json());
+    assert.equal(pendingControls.controls[0].id,command.id);
+    await post(path+'/actions',{type:'ack',ids:[command.id]},host.token);
+    await post(path+'/actions',{type:'permissions',id:guest.participantId,canSkip:false,canPause:true},host.token);
+    assert.equal((await post(path+'/actions',{type:'control',command:'skip'},guest.token)).status,403);
+    assert.equal((await post(path+'/actions',{type:'control',command:'stop'},guest.token)).status,200);
+    const guestMembers=await fetch(base+path+'/status',{headers:{Authorization:`Bearer ${guest.token}`}}).then(r=>r.json());
+    assert.equal(guestMembers.members.find(m=>m.id===guest.participantId).canPause,true);
     await post(path+'/actions',{type:'kick',id:guest.participantId},host.token);
     await guestEvent('removed');
     assert.equal((await post(path+'/actions',{type:'enqueue',track},guest.token)).status,403);

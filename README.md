@@ -1,5 +1,9 @@
 # Symphony Jam relay
 
+Symphony 0.2 requires this updated relay (protocol version 2). Replace the
+server files in your Render-connected repository and redeploy. Existing rooms
+end during deployment. Your `/health` response should include `protocolVersion: 2`.
+
 A small, dependency-free Node server for shared queues and host-led synchronized
 playback. Audio goes directly from each listener's music source to their app;
 this server carries only track metadata, participant names, and playback state.
@@ -31,6 +35,12 @@ rooms. Do not deploy to a platform limited to short-lived request functions.
    name, and pastes the invite.
 5. Add songs from the Jam search or a song's **Add to Jam** menu. The host controls
    play, pause, seeking, skips, and queue order. Listener volume stays local.
+   The owner can separately grant each listener permission to skip songs and
+   pause/resume/stop music. Authorized listeners are shown as DJs. These grants
+   are checked by the relay and can be revoked immediately.
+
+Search previews are local to the listener's device and are not relayed. Click
+a song's title to add it to the queue; the preview button never adds a song.
 
 The server address is remembered locally. To preconfigure a build, set
 `VITE_JAM_SERVER_URL=https://your-server.example` before building the app.
