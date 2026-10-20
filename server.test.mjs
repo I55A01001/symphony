@@ -29,7 +29,7 @@ test('two clients share a queue and state, with equal participant controls',asyn
     const hostEvent=await stream(host.roomId,host.token);
     const guestEvent=await stream(host.roomId,guest.token);
     assert.equal((await guestEvent('members')).length,2);
-    const state={queue:[track],currentIndex:0,status:'playing',positionMs:1234,rate:1};
+    const state={queue:[track],currentIndex:0,status:'playing',positionMs:1234,rate:1,shuffle:true,repeat:'all'};
     assert.equal((await post(path+'/actions',{type:'snapshot',state},guest.token)).status,403);
     assert.equal((await post(path+'/actions',{type:'snapshot',state},host.token)).status,200);
     assert.equal((await guestEvent('snapshot')).positionMs,1234);
@@ -39,6 +39,7 @@ test('two clients share a queue and state, with equal participant controls',asyn
     const recovered=await fetch(base+path+'/status',{headers:{Authorization:`Bearer ${host.token}`}}).then(r=>r.json());
     assert.equal(recovered.additions[0].id,addition.id);
     assert.equal(recovered.snapshot.positionMs,1234);
+    assert.equal(recovered.snapshot.shuffle,true);assert.equal(recovered.snapshot.repeat,'all');
     assert.equal((await post(path+'/actions',{type:'ack',ids:[addition.id]},guest.token)).status,403);
     await post(path+'/actions',{type:'ack',ids:[addition.id]},host.token);
     const acknowledged=await fetch(base+path+'/status',{headers:{Authorization:`Bearer ${host.token}`}}).then(r=>r.json());
@@ -48,6 +49,12 @@ test('two clients share a queue and state, with equal participant controls',asyn
     }
     assert.equal((await post(path+'/actions',{type:'control',command:'seek',payload:{positionMs:5000}},guest.token)).status,200);
     assert.equal((await post(path+'/actions',{type:'control',command:'seek',payload:{positionMs:-1}},guest.token)).status,400);
+    for(const [command,payload] of [['remove',{index:0,trackId:track.id}],['shuffle',{enabled:true}],['repeat',{mode:'one'}],['play',{track,queue:[track],queueIndex:0}]]){
+      assert.equal((await post(path+'/actions',{type:'control',command,payload},guest.token)).status,200);
+    }
+    for(const [command,payload] of [['remove',{index:-1,trackId:track.id}],['shuffle',{enabled:'yes'}],['repeat',{mode:'bad'}]]){
+      assert.equal((await post(path+'/actions',{type:'control',command,payload},guest.token)).status,400);
+    }
     const command=await hostEvent('control');assert.equal(command.command,'skip');
     const pendingControls=await fetch(base+path+'/status',{headers:{Authorization:`Bearer ${host.token}`}}).then(r=>r.json());
     assert.equal(pendingControls.controls[0].id,command.id);

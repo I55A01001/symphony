@@ -1,8 +1,10 @@
 # Symphony Jam relay
 
-Symphony 0.3 requires this updated relay (protocol version 3). Replace the
+Symphony PC 0.4 requires this updated relay (protocol version 4). Replace the
 server files in your Render-connected repository and redeploy. Existing rooms
-end during deployment. Your `/health` response should include `protocolVersion: 3`.
+end during deployment. Your `/health` response should include `protocolVersion: 4`.
+Update all participating PC apps to 0.4 as well. Earlier PC builds and the existing
+Android 0.1 APK use protocol 3 and cannot join this relay; Android needs a separate update.
 
 A small, dependency-free Node server for shared queues and host-led synchronized
 playback. Audio goes directly from each listener's music source to their app;
@@ -34,7 +36,8 @@ rooms. Do not deploy to a platform limited to short-lived request functions.
 4. Your friend opens **Jam → Join a Jam** in this same Symphony build, enters a
    name, and pastes the invite.
 5. Add songs from the Jam search or a song's **Add to Jam** menu. Listener volume stays local.
-   Everyone can play, pause, stop, skip, seek, change speed, edit the shared queue,
+   Everyone can play, pause, stop, skip, seek, change speed, remove queued songs,
+   toggle shuffle/repeat, play a whole playlist, edit the shared queue,
    remove another participant, or end the Jam. There are no roles to assign.
 
 Search previews are local to the listener's device and are not relayed. Click
@@ -70,6 +73,6 @@ Run `node --test server.test.mjs` for the two-client relay integration test.
   prevent a listener from playing a song even when others can hear it.
 - Keep HTTPS access logs private: event-stream URLs contain session tokens.
 
-When the chosen queue ends, the coordinating app requests related songs based on the last three queued tracks and shares
+With repeat off, when the chosen queue ends, the coordinating app requests related songs based on the last three queued tracks and shares
 them with the whole room. Stop pauses playback without starting suggestions.
 The coordinating device must stay connected; leaving it ends the room.
