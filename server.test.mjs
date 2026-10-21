@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createJamServer,cleanSnapshot,cleanTrack } from './server.mjs';
+import { createTempoServer,cleanSnapshot,cleanTrack } from './server.mjs';
 const track={id:'dQw4w9WgXcQ',title:'A song',artists:'An artist',durationMs:10000,coverUrl:'https://example.com/cover.png'};
 test('validates and sanitizes shared music metadata',()=>{
   assert.throws(()=>cleanTrack({id:'file:///etc/passwd'}));
@@ -9,7 +9,7 @@ test('validates and sanitizes shared music metadata',()=>{
   assert.throws(()=>cleanSnapshot({queue:Array(201).fill(track),currentIndex:0,status:'playing'}));
 });
 test('two clients share a queue and state, with equal participant controls',async()=>{
-  const server=createJamServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  const server=createTempoServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const base=`http://127.0.0.1:${server.address().port}`;
   const controllers=[];
   const post=async(path,body,token)=>{const r=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body)});return {status:r.status,data:await r.json()};};
@@ -61,7 +61,10 @@ test('two clients share a queue and state, with equal participant controls',asyn
     assert.equal(pendingControls.members.some(m=>'canSkip' in m||'canPause' in m),false);
     await post(path+'/actions',{type:'ack',ids:[command.id]},host.token);
     const other=(await post(path+'/join',{name:'Other',invite:host.invite})).data;
-    assert.equal((await post(path+'/actions',{type:'kick',id:other.participantId},guest.token)).status,200);
+    assert.equal((await post(path+'/actions',{type:'kick',id:other.participantId},guest.token)).status,403);
+    assert.equal((await post(path+'/actions',{type:'kick',id:host.participantId},guest.token)).status,403);
+    assert.equal((await post(path+'/actions',{type:'control',command:'skip'},other.token)).status,200);
+    assert.equal((await post(path+'/actions',{type:'kick',id:other.participantId},host.token)).status,200);
     assert.equal((await post(path+'/actions',{type:'control',command:'skip'},other.token)).status,403);
     await post(path+'/actions',{type:'kick',id:guest.participantId},host.token);
     await guestEvent('removed');

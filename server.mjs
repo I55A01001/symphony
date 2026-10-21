@@ -17,7 +17,7 @@ export function cleanSnapshot(s) {
   if (index < -1 || index >= queue.length) throw fail(400,'Invalid queue index');
   return { queue, currentIndex:index, status:s.status, positionMs:Math.max(0,Math.min(Number(s.positionMs)||0,86_400_000)), rate:Math.max(.25,Math.min(Number(s.rate)||1,4)), shuffle:s.shuffle===true, repeat:["off","all","one"].includes(s.repeat)?s.repeat:"off", at:Date.now() };
 }
-export function createJamServer() {
+export function createTempoServer() {
   const rooms=new Map(), budgets=new Map();
   const send=(res,type,data)=>res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
   const broadcast=(room,type,data)=>{ for(const p of room.people.values()) if(p.stream) send(p.stream,type,data); };
@@ -35,7 +35,7 @@ export function createJamServer() {
       if(req.method==='GET' && url.pathname==='/health'){json(200,{ok:true,protocolVersion:4,now:Date.now()});return;}
       if(req.method==='GET' && url.pathname==='/'){
         res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",'Referrer-Policy':'no-referrer'});
-        res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Join Symphony Jam</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#101010;color:#fafafa;font:16px/1.6 system-ui,sans-serif}main{max-width:520px;padding:36px}h1{font-size:38px;line-height:1.15;letter-spacing:-1px}p,li{color:#bdbdbd}label{display:block;font-weight:600}textarea{box-sizing:border-box;width:100%;margin:12px 0;padding:14px;border:1px solid #444;border-radius:12px;background:#202020;color:#fff;font:13px/1.5 monospace;resize:none}button{padding:12px 20px;border:0;border-radius:10px;background:#fff;color:#111;font-weight:700;cursor:pointer}small{display:block;margin-top:24px;color:#888}</style><main><p>SYMPHONY TOGETHER</p><h1>Join your friends’ Jam.</h1><p>This is the Symphony Jam connection server. Listen using the Symphony desktop app.</p><ol><li>Open Symphony and click the Jam icon.</li><li>Choose <strong>Join a Jam</strong> and enter your name.</li><li>Paste the complete invite code below.</li></ol><section id="invite" hidden><label for="code">Your invite code</label><textarea id="code" rows="4" readonly></textarea><button id="copy">Copy invite</button><p id="status" role="status"></p></section><p id="empty">Ask your friend for their complete Jam invite code.</p><small>Each listener needs Symphony installed. This page does not play music.</small></main><script>const code=location.href;const valid=/^#jam=[a-f0-9]{12}\\.[A-Za-z0-9_-]{32}$/.test(location.hash);if(valid){document.getElementById('invite').hidden=false;document.getElementById('empty').hidden=true;document.getElementById('code').value=code;}document.getElementById('copy').onclick=async()=>{try{await navigator.clipboard.writeText(code);document.getElementById('status').textContent='Copied. Paste it into Symphony → Jam → Join a Jam.';}catch{document.getElementById('code').select();document.getElementById('status').textContent='Select and copy the invite above.';}};</script></html>`);return;
+        res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Join Symphony Tempo</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#101010;color:#fafafa;font:16px/1.6 system-ui,sans-serif}main{max-width:520px;padding:36px}h1{font-size:38px;line-height:1.15;letter-spacing:-1px}p,li{color:#bdbdbd}label{display:block;font-weight:600}textarea{box-sizing:border-box;width:100%;margin:12px 0;padding:14px;border:1px solid #444;border-radius:12px;background:#202020;color:#fff;font:13px/1.5 monospace;resize:none}button{padding:12px 20px;border:0;border-radius:10px;background:#fff;color:#111;font-weight:700;cursor:pointer}small{display:block;margin-top:24px;color:#888}</style><main><p>SYMPHONY TOGETHER</p><h1>Join your friends’ Tempo.</h1><p>This is the Symphony Tempo connection server. Listen using the Symphony desktop app.</p><ol><li>Open Symphony and click the Tempo icon.</li><li>Choose <strong>Join a Tempo</strong> and enter your name.</li><li>Paste the complete invite code below.</li></ol><section id="invite" hidden><label for="code">Your invite code</label><textarea id="code" rows="4" readonly></textarea><button id="copy">Copy invite</button><p id="status" role="status"></p></section><p id="empty">Ask your friend for their complete Tempo invite code.</p><small>Each listener needs Symphony installed. This page does not play music.</small></main><script>const code=location.href;const valid=/^#tempo=[a-f0-9]{12}\\.[A-Za-z0-9_-]{32}$/.test(location.hash);if(valid){document.getElementById('invite').hidden=false;document.getElementById('empty').hidden=true;document.getElementById('code').value=code;}document.getElementById('copy').onclick=async()=>{try{await navigator.clipboard.writeText(code);document.getElementById('status').textContent='Copied. Paste it into Symphony → Tempo → Join a Tempo.';}catch{document.getElementById('code').select();document.getElementById('status').textContent='Select and copy the invite above.';}};</script></html>`);return;
       }
       const address=req.socket.remoteAddress;
       const now=Date.now(); const budget=budgets.get(address)||{at:now,n:0};
@@ -45,17 +45,17 @@ export function createJamServer() {
       const person=(name,host)=>({id:secret(),token:secret(),name:String(name||'Listener').trim().slice(0,32)||'Listener',host,stream:null,lastSeen:now});
       const credentials=(room,p)=>({roomId:room.id,invite:room.invite,token:p.token,participantId:p.id,host:p.host});
       if(req.method==='POST' && url.pathname==='/rooms'){
-        if(rooms.size>=500) throw fail(503,'Jam server is full');
+        if(rooms.size>=500) throw fail(503,'Tempo server is full');
         const b=await body(), p=person(b.name,true);
         const room={id:randomBytes(6).toString('hex'),invite:secret(),people:new Map([[p.token,p]]),state:null,pending:new Map(),controls:new Map(),updated:now,hostLostAt:null};
         rooms.set(room.id,room);json(201,credentials(room,p));return;
       }
       const match=/^\/rooms\/([a-f0-9]{12})\/(join|events|actions|status)$/.exec(url.pathname);
       if(!match) throw fail(404,'Not found');
-      const room=rooms.get(match[1]); if(!room) throw fail(404,'This Jam has ended or does not exist');
+      const room=rooms.get(match[1]); if(!room) throw fail(404,'This Tempo has ended or does not exist');
       if(match[2]==='join' && req.method==='POST'){
         const b=await body(); if(b.invite!==room.invite) throw fail(403,'Invalid invite code');
-        if(room.people.size>=20) throw fail(409,'This Jam is full (20 listeners)');
+        if(room.people.size>=20) throw fail(409,'This Tempo is full (20 listeners)');
         const p=person(b.name,false);room.people.set(p.token,p);room.updated=now;
         broadcast(room,'members',members(room));json(200,credentials(room,p));return;
       }
@@ -113,9 +113,9 @@ export function createJamServer() {
         const command={id:secret(),command:b.command,payload,by:p.id};room.controls.set(command.id,command);
         broadcast(room,'control',command);
       } else if(b.type==='kick') {
-        const target=[...room.people.values()].find(x=>x.id===b.id&&x.id!==p.id);
-        if(target?.host){end(room);}
-        else if(target){if(target.stream){send(target.stream,'removed',{});target.stream.end();}room.people.delete(target.token);broadcast(room,'members',members(room));}
+        if(!p.host)throw fail(403,'Only the host can remove listeners');
+        const target=[...room.people.values()].find(x=>x.id===b.id&&!x.host);
+        if(target){if(target.stream){send(target.stream,'removed',{});target.stream.end();}room.people.delete(target.token);broadcast(room,'members',members(room));}
       } else if(b.type==='end') {
         end(room);
       } else if(b.type==='leave') {
@@ -138,5 +138,5 @@ export function createJamServer() {
   return server;
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
-  const server=createJamServer();server.listen(Number(process.env.PORT)||8787,'0.0.0.0',()=>console.log('Symphony Jam relay listening'));
+  const server=createTempoServer();server.listen(Number(process.env.PORT)||8787,'0.0.0.0',()=>console.log('Symphony Tempo relay listening'));
 }

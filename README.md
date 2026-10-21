@@ -1,10 +1,11 @@
-# Symphony Jam relay
+# Symphony Tempo relay
 
-Symphony PC 0.4 requires this updated relay (protocol version 4). Replace the
+Symphony PC 0.5 uses this Tempo relay (protocol version 4). Replace the
 server files in your Render-connected repository and redeploy. Existing rooms
 end during deployment. Your `/health` response should include `protocolVersion: 4`.
-Update all participating PC apps to 0.4 as well. Earlier PC builds and the existing
-Android 0.1 APK use protocol 3 and cannot join this relay; Android needs a separate update.
+Use the updated PC app for new `#tempo=` invitations. Earlier `#jam=` invites
+are still accepted by the new app. Android compatibility depends on its installed
+build and protocol support; this archive does not update the Android APK.
 
 A small, dependency-free Node server for shared queues and host-led synchronized
 playback. Audio goes directly from each listener's music source to their app;
@@ -30,21 +31,21 @@ rooms. Do not deploy to a platform limited to short-lived request functions.
 
 ## Use it in Symphony
 
-1. Open **Jam** using the radio icon in the sidebar.
-2. Enter your display name and the server's HTTPS address; choose **Start a Jam**.
+1. Open **Tempo** using the Tempo icon in the sidebar.
+2. Enter your display name and the server's HTTPS address; choose **Start a Tempo**.
 3. Select **Copy invite** and send the complete code to a friend.
-4. Your friend opens **Jam → Join a Jam** in this same Symphony build, enters a
+4. Your friend opens **Tempo → Join a Tempo** in this same Symphony build, enters a
    name, and pastes the invite.
-5. Add songs from the Jam search or a song's **Add to Jam** menu. Listener volume stays local.
+5. Add songs from the Tempo search or a song's **Add to Tempo** menu. Listener volume stays local.
    Everyone can play, pause, stop, skip, seek, change speed, remove queued songs,
    toggle shuffle/repeat, play a whole playlist, edit the shared queue,
-   remove another participant, or end the Jam. There are no roles to assign.
+   or end the Tempo. Only the host can remove another participant.
 
 Search previews are local to the listener's device and are not relayed. Click
 a song's title to add it to the queue; the preview button never adds a song.
 
 The server address is remembered locally. To preconfigure a build, set
-`VITE_JAM_SERVER_URL=https://your-server.example` before building the app.
+`VITE_TEMPO_SERVER_URL=https://your-server.example` before building the app.
 Invites are pasteable codes, not public web player pages.
 
 ## Local verification
@@ -76,3 +77,6 @@ Run `node --test server.test.mjs` for the two-client relay integration test.
 With repeat off, when the chosen queue ends, the coordinating app requests related songs based on the last three queued tracks and shares
 them with the whole room. Stop pauses playback without starting suggestions.
 The coordinating device must stay connected; leaving it ends the room.
+
+### Host-only moderation update
+Deploy this server version as well as updating the desktop app. Older servers still allow participant kicks; hiding a button in a client cannot secure an older server. Playback and queue controls remain shared.

@@ -1,5 +1,5 @@
 {
-  "name": "symphony-jam-relay",
+  "name": "symphony-tempo-relay",
   "private": true,
   "type": "module",
   "scripts": { "start": "node server.mjs", "test": "node --test server.test.mjs" },
